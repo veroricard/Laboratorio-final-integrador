@@ -324,4 +324,7 @@ Monto a extraer: 999999
 
 ## 👤 Autor
 
-Proyecto académico de Programación Orientada a Objetos. Reemplazá esta sección con tu nombre y tu usuario de GitHub.
+Proyecto académico de Programación Orientada a Objetos.
+
+**Verónica Ricard** - Técnico Superior en DevOps, ITS Cipolletti
+GitHub: [@veroricard](https://github.com/veroricard)
