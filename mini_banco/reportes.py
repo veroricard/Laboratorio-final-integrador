@@ -1,18 +1,17 @@
-"""Generación del reporte PDF con la información del sistema (usa reportlab)."""
+"""Generación del reporte PDF con la información del sistema (usa fpdf2)."""
 
 import os
 from datetime import datetime
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from fpdf import FPDF
+from fpdf.fonts import FontFace
 
 from mini_banco.excepciones import ReporteError
 
-COLOR_PRINCIPAL = colors.HexColor("#0B5D4B")
-COLOR_FILA = colors.HexColor("#EEF5F2")
+COLOR_PRINCIPAL = (11, 93, 75)
+COLOR_FILA = (238, 245, 242)
+COLOR_BLANCO = (255, 255, 255)
+COLOR_GRIS = (128, 128, 128)
 
 
 def formatear_monto(monto):
@@ -27,108 +26,142 @@ def formatear_fecha(fecha):
     return fecha.strftime("%d/%m/%Y %H:%M")
 
 
-def construir_estilos():
-    """Devuelve los estilos de párrafo usados en el reporte."""
-    base = getSampleStyleSheet()
-    return {
-        "titulo": ParagraphStyle("Titulo", parent=base["Title"], textColor=COLOR_PRINCIPAL, fontSize=22),
-        "subtitulo": ParagraphStyle("Subtitulo", parent=base["Heading2"], textColor=COLOR_PRINCIPAL, spaceBefore=14),
-        "texto": ParagraphStyle("Texto", parent=base["BodyText"], fontSize=10, leading=14),
-        "celda": ParagraphStyle("Celda", parent=base["BodyText"], fontSize=8.5, leading=10.5),
-    }
+def limpiar_texto(valor):
+    """Convierte ``valor`` a texto compatible con la fuente Helvetica (latin-1)."""
+    return str(valor).encode("latin-1", "replace").decode("latin-1")
 
 
-def crear_tabla(filas, encabezados, anchos=None):
-    """Arma una tabla con encabezado de color y filas alternadas."""
-    estilos = construir_estilos()
-    datos = [encabezados] + [
-        [Paragraph(str(valor), estilos["celda"]) for valor in fila] for fila in filas
-    ]
-    tabla = Table(datos, colWidths=anchos, repeatRows=1)
-    tabla.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), COLOR_PRINCIPAL),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COLOR_FILA]),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#B8C9C3")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    return tabla
+class ReportePDF(FPDF):
+    """PDF con pie de página que muestra el nombre del sistema y el número de hoja."""
+
+    def __init__(self, titulo_pie="Mini Banco - Reporte del sistema"):
+        super().__init__(orientation="P", unit="mm", format="A4")
+        self.titulo_pie = limpiar_texto(titulo_pie)
+        self.set_margins(20, 20, 20)
+        self.set_auto_page_break(auto=True, margin=20)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "", 8)
+        self.set_text_color(*COLOR_GRIS)
+        self.cell(0, 8, self.titulo_pie, align="L")
+        self.set_x(self.l_margin)
+        self.cell(0, 8, f"Página {self.page_no()}", align="R")
+        self.set_text_color(0, 0, 0)
 
 
-def armar_contenido(banco):
-    """Construye la lista de elementos (flowables) que forman el PDF."""
-    estilos = construir_estilos()
+def agregar_titulo(pdf, texto):
+    """Escribe el título principal del reporte."""
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(*COLOR_PRINCIPAL)
+    pdf.multi_cell(0, 10, limpiar_texto(texto), new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_text_color(0, 0, 0)
+
+
+def agregar_subtitulo(pdf, texto):
+    """Escribe un título de sección."""
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(*COLOR_PRINCIPAL)
+    pdf.cell(0, 8, limpiar_texto(texto), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+
+def agregar_parrafo(pdf, texto):
+    """Escribe un párrafo de texto normal."""
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(0, 5.5, limpiar_texto(texto), new_x="LMARGIN", new_y="NEXT")
+
+
+def agregar_tabla(pdf, encabezados, filas, anchos):
+    """Dibuja una tabla con encabezado de color y filas alternadas."""
+    pdf.set_font("Helvetica", "", 8.5)
+    estilo_encabezado = FontFace(emphasis="BOLD", color=COLOR_BLANCO, fill_color=COLOR_PRINCIPAL)
+    with pdf.table(
+        col_widths=anchos,
+        headings_style=estilo_encabezado,
+        cell_fill_color=COLOR_FILA,
+        cell_fill_mode="ROWS",
+        line_height=5.5,
+        text_align="LEFT",
+        padding=1.5,
+        borders_layout="ALL",
+    ) as tabla:
+        encabezado = tabla.row()
+        for texto in encabezados:
+            encabezado.cell(limpiar_texto(texto))
+        for fila in filas:
+            registro = tabla.row()
+            for valor in fila:
+                registro.cell(limpiar_texto(valor))
+
+
+def armar_contenido(pdf, banco):
+    """Escribe en ``pdf`` todas las secciones del reporte."""
     resumen = banco.resumen()
-    contenido = [
-        Paragraph(f"{banco.get_nombre()} - Reporte del sistema", estilos["titulo"]),
-        Paragraph(f"Generado el {formatear_fecha(datetime.now())}", estilos["texto"]),
-        Spacer(1, 0.4 * cm),
-        Paragraph("Acerca del sistema", estilos["subtitulo"]),
-        Paragraph(
-            "Sistema de gestión bancaria desarrollado con Programación Orientada a Objetos. "
-            "Modela clientes, cuentas (caja de ahorro y cuenta corriente) y transacciones "
-            "(depósitos, extracciones, transferencias, intereses y comisiones). "
-            "Los datos se almacenan en listas en memoria mientras el programa está en ejecución.",
-            estilos["texto"],
-        ),
-        Paragraph("Resumen general", estilos["subtitulo"]),
-        crear_tabla(
-            [
-                ["Clientes registrados", resumen["clientes"]],
-                ["Cuentas abiertas", resumen["cuentas"]],
-                ["Transacciones realizadas", resumen["transacciones"]],
-                ["Saldo total del banco", formatear_monto(resumen["saldo_total"])],
-            ],
-            ["Concepto", "Valor"],
-            [9 * cm, 6 * cm],
-        ),
-        Paragraph("Clientes", estilos["subtitulo"]),
-    ]
+    agregar_titulo(pdf, f"{banco.get_nombre()} - Reporte del sistema")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Generado el {formatear_fecha(datetime.now())}",
+             new_x="LMARGIN", new_y="NEXT", align="C")
+
+    agregar_subtitulo(pdf, "Acerca del sistema")
+    agregar_parrafo(
+        pdf,
+        "Sistema de gestión bancaria desarrollado con Programación Orientada a Objetos. "
+        "Modela clientes, cuentas (caja de ahorro y cuenta corriente) y transacciones "
+        "(depósitos, extracciones, transferencias, intereses y comisiones). "
+        "Los datos se almacenan en listas en memoria mientras el programa está en ejecución.",
+    )
+
+    agregar_subtitulo(pdf, "Resumen general")
+    agregar_tabla(
+        pdf,
+        ["Concepto", "Valor"],
+        [
+            ["Clientes registrados", resumen["clientes"]],
+            ["Cuentas abiertas", resumen["cuentas"]],
+            ["Transacciones realizadas", resumen["transacciones"]],
+            ["Saldo total del banco", formatear_monto(resumen["saldo_total"])],
+        ],
+        (100, 70),
+    )
+
+    agregar_subtitulo(pdf, "Clientes")
     filas_clientes = [
         [c.get_dni(), c.get_nombre(), len(c.get_cuentas()), formatear_monto(c.get_saldo_total())]
         for c in banco.get_clientes()
     ]
-    contenido.append(crear_tabla(
-        filas_clientes or [["-", "Sin clientes registrados", "-", "-"]],
+    agregar_tabla(
+        pdf,
         ["DNI", "Nombre", "Cuentas", "Saldo total"],
-        [3 * cm, 7 * cm, 2.5 * cm, 4 * cm],
-    ))
-    contenido.append(Paragraph("Cuentas", estilos["subtitulo"]))
+        filas_clientes or [["-", "Sin clientes registrados", "-", "-"]],
+        (30, 70, 25, 45),
+    )
+
+    agregar_subtitulo(pdf, "Cuentas")
     filas_cuentas = [
         [c.get_numero(), c.get_tipo(), c.get_titular().get_nombre(),
          formatear_monto(c.get_saldo()), c.get_condiciones()]
         for c in banco.get_cuentas()
     ]
-    contenido.append(crear_tabla(
-        filas_cuentas or [["-", "-", "Sin cuentas abiertas", "-", "-"]],
+    agregar_tabla(
+        pdf,
         ["Número", "Tipo", "Titular", "Saldo", "Condiciones"],
-        [2.2 * cm, 3 * cm, 3.4 * cm, 2.8 * cm, 6 * cm],
-    ))
-    contenido.append(Paragraph("Transacciones", estilos["subtitulo"]))
+        filas_cuentas or [["-", "-", "Sin cuentas abiertas", "-", "-"]],
+        (20, 28, 30, 30, 62),
+    )
+
+    agregar_subtitulo(pdf, "Transacciones")
     filas_trans = [
         [f[0], f[1], f[2], f[3], formatear_monto(f[4])]
         for f in (t.a_fila() for t in banco.get_transacciones())
     ]
-    contenido.append(crear_tabla(
-        filas_trans or [["-", "-", "-", "Sin transacciones", "-"]],
+    agregar_tabla(
+        pdf,
         ["N.º", "Fecha", "Tipo", "Descripción", "Monto"],
-        [1.2 * cm, 3 * cm, 2.6 * cm, 7.4 * cm, 3.2 * cm],
-    ))
-    return contenido
-
-
-def dibujar_pie(lienzo, documento):
-    """Escribe el número de página al pie de cada hoja."""
-    lienzo.saveState()
-    lienzo.setFont("Helvetica", 8)
-    lienzo.setFillColor(colors.grey)
-    lienzo.drawRightString(A4[0] - 2 * cm, 1.2 * cm, f"Página {documento.page}")
-    lienzo.drawString(2 * cm, 1.2 * cm, "Mini Banco - Reporte del sistema")
-    lienzo.restoreState()
+        filas_trans or [["-", "-", "-", "Sin transacciones", "-"]],
+        (10, 30, 24, 70, 36),
+    )
 
 
 def generar_pdf(banco, ruta="reportes/reporte_banco.pdf"):
@@ -140,12 +173,12 @@ def generar_pdf(banco, ruta="reportes/reporte_banco.pdf"):
         carpeta = os.path.dirname(ruta)
         if carpeta:
             os.makedirs(carpeta, exist_ok=True)
-        documento = SimpleDocTemplate(
-            ruta, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm,
-            topMargin=2 * cm, bottomMargin=2 * cm,
-            title=f"{banco.get_nombre()} - Reporte", author="Mini Banco",
-        )
-        documento.build(armar_contenido(banco), onFirstPage=dibujar_pie, onLaterPages=dibujar_pie)
+        pdf = ReportePDF()
+        pdf.set_title(limpiar_texto(f"{banco.get_nombre()} - Reporte"))
+        pdf.set_author("Mini Banco")
+        pdf.add_page()
+        armar_contenido(pdf, banco)
+        pdf.output(ruta)
     except OSError as error:
         raise ReporteError(f"No se pudo guardar el PDF en '{ruta}': {error}") from error
     return ruta
