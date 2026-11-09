@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![POO](https://img.shields.io/badge/Paradigma-POO-0B5D4B)
-![Tests](https://img.shields.io/badge/pytest-292%20passed-brightgreen?logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/pytest-293%20passed-brightgreen?logo=pytest&logoColor=white)
 ![Cobertura](https://img.shields.io/badge/cobertura-100%25-brightgreen)
 ![PDF](https://img.shields.io/badge/reportes-PDF-red)
 
@@ -44,7 +44,7 @@ El **cierre mensual** acredita los intereses de las cajas de ahorro y cobra las 
 - ✅ Reporte del sistema en **PDF** (resumen, clientes, cuentas y transacciones).
 - ✅ Validación de datos y manejo de errores con `try` / `except` y excepciones propias.
 - ✅ Datos almacenados en arreglos (listas) en memoria.
-- ✅ 292 pruebas unitarias con **pytest** y 100 % de cobertura.
+- ✅ 293 pruebas unitarias con **pytest** y 100 % de cobertura.
 
 ## 🧠 Principios de POO aplicados
 
@@ -61,7 +61,7 @@ El **cierre mensual** acredita los intereses de las cajas de ahorro y cobra las 
 ## 🗂️ Estructura del proyecto
 
 ```text
-mini_banco/
+Laboratorio-final-integrador/
 ├── main.py                  # Punto de entrada
 ├── requirements.txt         # Dependencias
 ├── pytest.ini               # Configuración de pytest
@@ -87,7 +87,7 @@ mini_banco/
 1. Cloná o descargá el proyecto y entrá a la carpeta:
 
    ```bash
-   cd mini_banco
+   cd Laboratorio-final-integrador
    ```
 
 2. Creá el entorno virtual:
